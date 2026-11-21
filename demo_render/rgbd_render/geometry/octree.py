@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-import kaolin
+try:
+    import kaolin
+    KAOLIN_AVAILABLE = True
+except ImportError:
+    kaolin = None
+    KAOLIN_AVAILABLE = False
 import numpy as np
 import torch
 
@@ -90,14 +95,18 @@ class OctreeSPC:
         normalized = (xyz_gpu - center) / self.scale  # [-1, 1]
 
         # --- Build Kaolin SPC (validation only; capped at 15) ---
-        _SPC_MAX = 15
-        spc_level = min(self.max_level, _SPC_MAX)
-        self.spc = kaolin.ops.conversions.pointcloud.unbatched_pointcloud_to_spc(
-            normalized.contiguous(), level=spc_level)
-        pyr = self.spc.pyramids[0]
-        _log(f"[octree] SPC(L{spc_level}) — "
-             + ", ".join(f"L{i}:{pyr[0,i].item()}"
-                         for i in range(0, spc_level + 1, 2)))
+        # kaolin 为可选依赖（仅用于 SPC 金字塔点数验证日志），未安装时跳过。
+        if KAOLIN_AVAILABLE:
+            _SPC_MAX = 15
+            spc_level = min(self.max_level, _SPC_MAX)
+            self.spc = kaolin.ops.conversions.pointcloud.unbatched_pointcloud_to_spc(
+                normalized.contiguous(), level=spc_level)
+            pyr = self.spc.pyramids[0]
+            _log(f"[octree] SPC(L{spc_level}) — "
+                 + ", ".join(f"L{i}:{pyr[0,i].item()}"
+                             for i in range(0, spc_level + 1, 2)))
+        else:
+            _log("[octree] kaolin 未安装，跳过 SPC 验证")
 
         # --- Centroid hierarchy ---
         self._compute_centroids(xyz_gpu, rgb_gpu, frames_gpu, normalized, _log)
